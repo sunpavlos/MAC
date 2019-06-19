@@ -1,0 +1,108 @@
+'MacroName:NAF_Production
+'MacroDescription: Gets NetID from the record and adds it to the file with statistics.
+
+'*** Adds status to 902 ADD/RPL, exports it to *.txt and Saves Record to NAF ***
+'*******************************************************************************
+Sub Main
+   Dim CS As Object
+   Set CS = CreateObject("Connex.Client")
+   Dim sStat$, sX$, sDate$, sSer$, sType$
+   
+'*** Login if not online ***
+   If CS.IsOnline = False Then
+     CS.Logon "", "", ""
+   End If
+    
+'*** Check if 949 is present, if yes, copy just NetID ***
+   If CS.GetField ("949", 1, sStat) = False Then
+      MsgBox "949 is missing! Macro aborted"
+      Exit Sub
+   Else
+      sStat = Mid (sStat, 6)
+      z = InStr(sStat, "*")
+      sStat = Left(sStat, z-1)
+   End If
+
+'*** Find and delete 949, othervise the record can't be added to NAF ***
+   'CS.CursorRow = 1
+   'CS.CursorColumn = 1
+   'If CS.FindText("949", True) Then
+   'CS.DeleteCurrentField
+   'End If
+   
+'*** Getting current Date ***
+   sDate = Format(Date, "yyyymmdd")
+   
+'*** Getting 1xx tag and its contents ***********
+
+   If CS.GetField("100", 1, sHeading) = True Then
+   Else
+    If CS.GetField("110", 1, sHeading) = True Then
+    Else
+     If CS.GetField("111", 1, sHeading) = True Then
+     Else
+      If CS.GetField("130", 1, sHeading) = True Then
+      Else
+       If CS.GetField("151", 1, sHeading) = True Then
+       End If
+      End If
+     End If
+    End If
+   End If
+   
+   sPart1 = Left(sHeading, 3)
+   sPart2 = Right(sHeading, Len(sHeading)-5)
+   sHeading = sPart1 & " " & sPart2
+
+'*** Check for SERIES ********************************
+   If CS.GetFixedField ("Series", sSeries) = True Then
+      sSer = "n"
+      If sSer = sSeries Then
+         sSer = "OTHER"
+      Else
+         sSer = "SERIES"
+      End If
+   End If
+   
+'*** ADD or REPLACE based on 010 presence ***
+   If CS.GetField("010", 1, sX) = True Then
+      sType = "RPL"
+      bResult = CS.ReplaceRecord
+      If bResult = True Then
+         MsgBox "The record WAS REPLACED successfully \('<>')/"
+      Else
+         MsgBox "Error. The record WAS NOT replaced /(':')\"
+         Exit Sub
+      End If
+    Else
+      sType = "ADD"
+      bResult = CS.AddToAuthorityFile
+      If bResult = True Then
+         MsgBox "Record ADDED to NAF \('<>')/"
+      Else
+         MsgBox "Error. Record was NOT added to NAF /(':')\"
+         Exit Sub
+      End If   
+   End If
+   
+'*** Final output ***********************************************
+   s949 = sStat & Chr(9) & sDate & Chr(9) & sSer & Chr(9) & sType & Chr(9) & sHeading
+
+'*** Append 949 to the "NAFProduction_NetID.txt" ONLINE ***
+   Clipboard.Clear
+   Clipboard.SetText s949
+   sStatisticsFile="\\lib-tsserver\CatDiv\NACO\" & "NAFProduction_" & sStat & ".txt"
+   Open sStatisticsFile For Append As #1
+   Write #1, s949
+   Close #1
+   
+'*** Append 949 to the "NAFProduction_NetID.txt" LOCALLY ***
+   sStatisticsFile2="C:\Usr\" & "NAFProduction_" & sStat & ".txt"
+   Open sStatisticsFile2 For Append As #1
+   Write #1, s949
+   Close #1
+
+End Sub
+'****************************************
+'****************************************
+
