@@ -1,0 +1,504 @@
+' MacroName: BIB_DumbFix_toRDA
+' MacroDescription: Fixes common known errors in an existing record and converts it into RDA record.
+                    '(the main principle of this macro  - do not modify any values unless they are incorrect).
+                    ' full list of action is provided at the end of this script//
+
+'******** AUTHORS/EDITORS *********
+' Written by Pavel Teptyuk, Princeton University Library
+' Email: pavel.teptyuk@princeton.edu
+' Revised: March, 2019
+
+'*********** HOW TO USE ************
+' To use this macro, activate it with an assigned hotkey in the open BibRecord.
+
+' ********* DISCLAIMER *************
+'     Princeton University Library shall not be liable for any loss or damage, lost profits, loss of business, loss of or damage to data, downtime or unavailability, of or in
+' connection with use of materials. OCLC shall have no liability for any claims arising from use of the materials, based on infringement of copyright,
+' patent, trade secret or other right, libel, slander or invasion of privacy or claims based on errors, inaccuracies, or omissions in or loss of the data.
+'     Princeton University Library makes no express warranties or representations and disclaims all implied warranties with respect to materials as to their accuracy, merchantability
+' or fitness for a particular purpose. Macros are supplied "as is."
+
+'***************************************************************
+'************************* SCRIPT START ************************
+'Option Explicit
+Dim sELvl, s040, s042, s043_1, s043_2, sBuffer, s260_1, s260_2, s264_1, s264_2, s264_3, _
+s264_4, s300, s504, s336, s337, s338, s336b, s337b, s338b, s490, s830 As String
+Dim sType, sBLvl, sForm, sFMus, sPubDate, sCopyRightDate, sCont, sIlls, sLitF, sBiog As String
+Dim sTemp As String
+Dim i, x As Integer
+Dim CS As Object
+
+'***************************************************************
+Sub FixStr (sStr$, sFnd$, sFix$, nCase%, nLoop%)
+'*** Update a string by inserting a string into another ***
+    If nCase = 0 Then
+        If nLoop = 0 Then
+            If InStr(UCase(sStr), UCase(sFnd)) <> 0 Then
+                sStr = Left(sStr, InStr(UCase(sStr), UCase(sFnd)) - 1) & sFix & Mid(sStr, InStr(UCase(sStr), UCase(sFnd)) + Len(sFnd))
+            End If
+        Else
+            Do While InStr(UCase(sStr), UCase(sFnd)) <> 0
+                sStr = Left(sStr, InStr(UCase(sStr), UCase(sFnd)) - 1) & sFix & Mid(sStr, InStr(UCase(sStr), UCase(sFnd)) + Len(sFnd))
+            Loop
+        End If
+    Else
+        If nLoop = 0 Then
+            If InStr(sStr, sFnd) <> 0 Then
+                sStr = Left(sStr, InStr(sStr, sFnd) - 1) & sFix & Mid(sStr, InStr(sStr, sFnd) + Len(sFnd))
+            End If
+        Else
+            Do While InStr(sStr, sFnd) <> 0
+                sStr = Left(sStr, InStr(sStr, sFnd) - 1) & sFix & Mid(sStr, InStr(sStr, sFnd) + Len(sFnd))
+            Loop
+        End If
+    End If
+End Sub
+
+'***************************************************************
+Sub Main
+   Set CS = CreateObject("Connex.Client")
+
+'*** Login if not online ***
+   If CS.IsOnline = False Then
+      CS.Logon "", "", ""
+   End If
+
+'*** Fixed fields must be displayed at Top or Bottom *********
+   If CS.FixedFieldPosition = 0 Then
+      MsgBox "Please set View\OCLC Fixed Field\Top_Bottom and run the macro again.", 0, "Add RDA fileds macro"
+   End If
+
+'*** Setting Fixed Fields (fix if not RDA and leave if <pcc\lcode>) *********
+   CS.GetField "042", 1, s042
+   CS.GetFixedField "ELvl", sELvl
+   If sELvl = "I" = False Then
+     If InStr(s042, "pcc") = False Then
+       CS.SetFixedField "ELvl", "I"
+     End If
+   End If
+ 
+   CS.GetFixedField "Srce", sSrce
+   If sSrce = "d" = False Then
+     If InStr(s042, "lcode") or InStr(s042, "pcc") = False Then
+      CS.SetFixedField "Srce", "d"
+     End If
+   End If
+
+   CS.GetFixedField "Desc", sDesc
+   If sDesc = "i" = False Then
+     CS.SetFixedField "Desc", "i"
+   End If
+   
+'*** Check and insert language code *********
+   CS.GetField "040", 1, s040
+   '*** No language code *********
+   If InStr(s040, " ßb ße rda") = False Then
+   Else
+     FixStr s040, "ßb ße", "ßb eng ße", 0, 0
+     CS.SetField 1, s040
+   End If
+
+'*** STANFORD - fix wrong language code *********
+   CS.GetField "040", 1, s040
+     If InStr(s040, "ßb ara ße rda") Then
+     FixStr s040, "ßb ara", "ßb eng", 0, 0                '*** see FixStr Sub is above **********
+     CS.SetField 1, s040
+   End If
+
+'*** STANFORD - FIX ALL Wrong Diacritics *********
+   'CS.GetField "040", 1, s040
+    ' If InStr(s040, "STF ßb") Then
+    ' CS.RunMacro("NACO_Macrobook!Diacritics_Fix_AllFields")
+   'End If
+
+'*** No language code (double-space) *********
+   If InStr(s040, "ßb  ße rda") = False Then
+   Else
+     FixStr s040, "ßb  ", "ßb eng ", 0, 0
+     CS.SetField 1, s040
+   End If
+
+'*** No language code (custom for PUL) *********
+   If InStr(s040, "PUL ße rda") = False Then
+   Else
+     FixStr s040, "PUL ße", "PUL ßb eng ße", 0, 0
+     CS.SetField 1, s040
+   End If
+
+'*** Insert language and cataloging code *********
+   CS.GetField "040", 1, s040
+   If InStr(s040, "ßb eng ße rda") = False Then
+     If InStr(s040, "ßb") Then
+       s040 = Left(s040, InStr(s040, "ßb") - 1) & Mid(s040, InStr(s040, "ßb") + 7)
+     End If
+     FixStr s040, "ßc", "ßb eng ße rda ßc", 0, 0                '*** see FixStr Sub is above **********
+     CS.SetField 1, s040
+   End If
+   
+'*** Replace <double space> with <single space> *****************     
+   CS.CursorRow = 1
+   CS.CursorColumn = 1
+   If CS.FindText ("  ", True) Then
+    If CS.ReplaceTextAll("  ", " ", False) Then
+    End If
+   End If
+
+'*** There are different possible combinations of 260 and 264, here I covered only (2x 260 and 2x 260 + 264 Lat) ****************
+'If CS.GetField("260", 1, s260_2) and S.GetField("260", 1, s260_2) and CS.GetField("264", 1, s260_2) = True Then
+
+'*** Change Arabic 260 tag to 264_1 ****************
+   If CS.GetFieldUnicode ("260", 1, s260_1) = True Then
+   s260_1 = Mid(s260_1, InStr(s260_1, "260")+5)
+   s260_1 = "264 1" & s260_1
+   CS.DeleteField "260", 1
+   CS.AddField 1, s260_1
+   End If
+
+'*** Change Latin 260 tag to 264_1 ****************
+   If CS.GetField("260", 1, s260_2) = True Then
+   s260_2 = Mid(s260_2, InStr(s260_2, "260")+5)
+   s260_2 = "264 1" & s260_2
+   CS.DeleteField "260", 1
+   CS.AddField 1, s260_2
+   CS.Reformat
+   End If
+
+'*** DELETE identical Latin 264 ***********************
+   If CS.GetField("264", 3, s264_3) or CS.GetField("264", 1, s264_1) = True Then
+     x=StrComp(s264_3, s264_1, 1)
+     If x = 0 Then
+       CS.DeleteField "264", 1
+     End If
+   End If
+
+'*** Replaced < p. > with < pages > *****************
+   CS.CursorRow = 1
+   CS.CursorColumn = 1
+   If CS.FindText (" p. ", True) Then
+     CS.ReplaceTextAll " p. ", " pages ", False
+   End If
+
+'*** Replaced < pp. > with < pages > *****************
+   CS.CursorRow = 1
+   CS.CursorColumn = 1
+   If CS.FindText (" pp. ", True) Then
+     CS.ReplaceTextAll " pp. ", "pages ", False
+   End If
+
+'*** Replaced <(p. > with <(pages > *****************
+   CS.CursorRow = 1
+   CS.CursorColumn = 1
+   If CS.FindText ("(p. ", True) Then
+     CS.ReplaceTextAll "(p. ", "(pages ", False
+   End If
+
+'*** Replaced <(pp. > with <(pages > *****************
+   CS.CursorRow = 1
+   CS.CursorColumn = 1
+   If CS.FindText ("(pp. ", True) Then
+     CS.ReplaceTextAll "(pp. ", "(pages ", False
+   End If
+
+'*** Replaced <ill.> with <illustrations> *****************
+   CS.CursorRow = 1
+   CS.CursorColumn = 1
+   If CS.FindText ("ill.", True) or CS.FindText ("illust.", True) Then
+     CS.ReplaceTextAll "ill.", "illustrations", False
+     CS.ReplaceTextAll "illust.", "illustrations", False
+   End If
+
+'*** Set Fixed Field for Illustrations *****************
+   CS.GetField "300", 1, s300
+   CS.GetFixedField "Ills", sIlls
+   If InStr(s300, "illust") and InStr(sIlls, "a") = 0 Then
+     CS.SetFixedField "Ills", "a" & Mid(sIlls, 1, 3) '*** <Mid> here is to make sure that other values are not removed ***
+   End If
+
+'*** Set Fixed Filed for Maps *****************
+     CS.GetFixedField "Ills", sIlls
+     If InStr(s300, "map") and InStr(sIlls, "b") = 0 Then
+     CS.SetFixedField "Ills", "b" & Mid(sIlls, 1, 3) '*** <Mid> here is to make sure that other values are not removed ***
+   End If
+
+'*** Set Fixed Filed for Index *****************
+   If CS.GetField("504", 1, s504) = True and InStr(s504, "ind") > 0 Then
+     CS.SetFixedField "Indx", "1"
+   End If
+
+'*** Set Fixed Field for Bibliography *****************
+   CS.GetFixedField "Cont", sCont
+   If CS.GetField("504", 1, s504) = True and InStr(sCont, "b") = 0 Then
+     CS.SetFixedField "Cont", "b" & Mid(sCont, 1, 3) '*** <Mid> here is to make sure that other values are not removed ***
+   End If
+
+'*** Add 336, 337, 338 based on a type of cataloged material *****************
+   CS.GetFixedField "Type", sType
+   CS.GetFixedField "BLvl", sBLvl
+   CS.GetFixedField "Form", sForm
+   If sType = "a" And (sForm = "" Or (sForm = "r" Or sForm="d")) Then
+'*** Tangible Book *****************
+       s336 = "336  text ßb txt ß2 rdacontent"
+       s337 = "337  unmediated ßb n ß2 rdamedia"
+       s338 = "338  volume ßb nc ß2 rdacarrier"
+   ElseIf sType = "a" And (sForm = "o") Then
+'*** Online Monograph or Serial *****************
+       s336 = "336  text ßb txt ß2 rdacontent"
+       s337 = "337  computer ßb c ß2 rdamedia"
+       s338 = "338  online resource ßb cr ß2 rdacarrier"
+   Else
+       s336 = "336  {UNABLE_TO_EXTRACT} ß2 rdacontent"
+       s337 = "337  {UNABLE_TO_EXTRACT} ß2 rdamedia"
+       s338 = "338  {UNABLE_TO_EXTRACT} ß2 rdacarrier"
+   End If
+
+'*** Check 3xx for presence and errors ***********************
+   If CS.GetField("336", 1, s336b) = True Then
+     x=StrComp(s336, s336b, 1)
+     If x = 0 Then
+     Else
+       CS.DeleteField "336", 1
+       CS.AddField 1 , s336
+     End If
+   Else
+     CS.AddField 1 , s336
+   End If
+
+      If CS.GetField("337", 1, s337b) = True Then
+     x=StrComp(s337, s337b, 1)
+     If x = 0 Then
+     Else
+       CS.DeleteField "337", 1
+       CS.AddField 1 , s337
+     End If
+   Else
+     CS.AddField 1 , s337
+   End If
+
+      If CS.GetField("338", 1, s338b) = True Then
+     x=StrComp(s338, s338b, 1)
+     If x = 0 Then
+     Else
+       CS.DeleteField "338", 1
+       CS.AddField 1 , s338
+     End If
+   Else
+     CS.AddField 1 , s338
+   End If
+
+'*** Add\Remove <.> in 300 after <cm> based on 490 presence *****************
+   CS.GetField "300", 1, s300
+   If CS.GetField("490", 1, s490) = True Then
+     If InStr(s300, "cm.") = 0 Then
+       FixStr s300, "cm", "cm.", 0, 0
+       CS.SetField 1, s300
+     End If
+   Else
+     If InStr(s300, "cm.") = 0 Then
+     Else
+       FixStr s300, "cm.", "cm", 0, 0
+       CS.SetField 1, s300
+     End If
+   End If
+   
+   CS.Reformat
+   
+'*** Check 043 and add if missing *****************
+'*** (CUSTOM Macro - LOCATION!) *****************
+   CS.RunMacro("Development!Add_043")
+   
+'*** Delete <043_2> if it completeley matches <043_1> *****************   
+    If CS.GetField("043", 1, s043_1) = True Then
+     If CS.GetField("043", 2, s043_2) = True Then
+      x=StrComp(s043_1, s043_2, 1)
+       If x = 0 Then
+        CS.DeleteField "043", 2
+       End If
+     End If
+    End If
+
+'*** Set Fixed Field for Literary Form *****************
+     CS.GetFixedField "LitF", sLitF
+     CS.CursorRow = 1
+     CS.CursorColumn = 1
+     
+   If CS.FindText ("novel", false) or CS.FindText ("fiction", false) or CS.FindText ("poetry", false) _
+   or CS.FindText ("stories", false) or CS.FindText ("essay", false) or CS.FindText ("poem", false) _
+   or CS.FindText ("drama", false) or CS.FindText ("speech", false) or CS.FindText ("letter", false) = 0 Then
+     If InStr(sLitF, "0") = 0 Then
+       If InStr(sLitF, "") = 0 Then
+         x = MsgBox ("Is item a Literary Work?", 32 & 4, "Literary Work?")
+       End If
+     End If
+     If x = 6 Then
+      Begin Dialog dLiterature 120, 201, "Type of Literary Work"
+   Text  18, 5, 83, 9, "Select type of Literature"
+   CheckBox  5, 20, 110, 15,  "(1) Fiction", .nBox0
+   CheckBox  5, 40, 110, 15,  "(f) Novels", .nBox1
+   CheckBox  5, 60, 110, 15,  "(j) Short stories", .nBox2
+   CheckBox  5, 80, 110, 15,  "(p) Poetry", .nBox3
+   CheckBox  4, 98, 110, 15,  "(e) Essays", .nBox4
+   CheckBox  4, 119, 110, 15, "(d) Dramas", .nBox5
+   CheckBox  4, 140, 110, 15, "(s) Speeches", .nBox6
+   CheckBox  4, 160, 110, 15, "(i) Letters", .nBox7
+   OkButton  5, 182, 51, 15
+   CancelButton  62, 182, 51, 15
+      End Dialog
+   Dim dLit As dLiterature
+   dLit.nBox0 = 0
+   dLit.nBox1 = 0
+   dLit.nBox2 = 0
+   dLit.nBox3 = 0
+   dLit.nBox4 = 0
+   dLit.nBox5 = 0
+   dLit.nBox6 = 0
+   dLit.nBox7 = 0
+   On Error Resume Next
+   Dialog dLit 
+   If Err <> 102 Then
+      If dLit.nBox0 = 1 Then
+        CS.SetFixedField "LitF", "1"
+      End If
+      If dLit.nBox1 = 1 Then
+        CS.SetFixedField "LitF", "f"
+      End If
+      If dLit.nBox2 = 1 Then
+        CS.SetFixedField "LitF", "j"
+      End If
+      If dLit.nBox3 = 1 Then
+        CS.SetFixedField "LitF", "p"
+      End If
+      If dLit.nBox4 = 1 Then
+        CS.SetFixedField "LitF", "e"
+      End If
+      If dLit.nBox5 = 1 Then
+        CS.SetFixedField "LitF", "d"
+      End If
+      If dLit.nBox6 = 1 Then
+        CS.SetFixedField "LitF", "s"
+      End If
+      If dLit.nBox7 = 1 Then
+        CS.SetFixedField "LitF", "i"
+      End If
+    End If
+  End If
+ELSE
+   CS.CursorRow = 1
+   CS.CursorColumn = 1
+End If
+
+'*** Set Fixed Field for Biography *****************
+     CS.GetFixedField "Biog", sBiog
+     CS.CursorRow = 1
+     CS.CursorColumn = 1
+     If CS.FindText ("biog", false) and InStr(sBiog, "") = 0 Then
+     x = MsgBox ("Does item contain biographical material?", 32 & 4, "Biography?")
+     If x = 6 Then
+       Begin Dialog dBiography 130, 119, "Type of Biography"
+   Text  5, 5, 120, 10, "Select biographical characteristics..."
+   CheckBox  5, 20, 110, 15, "(a) Autobiography", .nBox0
+   CheckBox  5, 40, 110, 15, "(b) Individual biography", .nBox1
+   CheckBox  5, 60, 110, 15, "(c) Collective biography", .nBox2
+   CheckBox  5, 80, 110, 15, "(d) Contains biographical information", .nBox3
+   OkButton  5, 100, 55, 15
+   CancelButton  70, 100, 55, 15
+      End Dialog
+   Dim dBio As dBiography
+   dBio.nBox0 = 0
+   dBio.nBox1 = 0
+   dBio.nBox2 = 0
+   dBio.nBox3 = 0
+   On Error Resume Next
+   Dialog dBio
+   If Err <> 102 Then
+      If dBio.nBox0 = 1 Then
+        CS.SetFixedField "Biog", "a"
+      End If
+      If dBio.nBox1 = 1 Then
+        CS.SetFixedField "Biog", "b"
+      End If
+      If dBio.nBox2 = 1 Then
+        CS.SetFixedField "Biog", "c"
+      End If
+      If dBio.nBox3 = 1 Then
+        CS.SetFixedField "Biog", "d"
+      End If
+    End If
+  End If
+  ELSE
+   CS.CursorRow = 1
+   CS.CursorColumn = 1
+ End If
+
+'*** Go to 050/090 and validate (find 050 -> move to 050 -> process -> validate) *****************
+'*** (CUSTOM Macro - LOCATION!) *****************
+   CS.CursorRow = 1
+   CS.CursorColumn = 1
+   If CS.GetField("050", 1, sBuffer) = True Then
+     If CS.FindText ("050", True) Then
+     CS.RunMacro("Development!CallNumber_Format")
+    Else
+     MsgBox "050 is NOT present \(*_*)/"
+    End If
+   End If
+
+'*** Validate and Add field with <000> with all Errors if found *****************
+   x = CS.Validate(sBuffer)
+   If x > 0 Then
+    'CS.AddField 1, "000  " & sBuffer
+    'MsgBox sBuffer
+   End If
+   
+'*** Add <$e author> and control *****************
+'*** (CUSTOM Macro - LOCATION!) *****************
+   CS.RunMacro("Development!Author_$e_Control")
+
+'*** Add 830 if missing and 490 is present *****************
+'*** (CUSTOM Macro - LOCATION!) *****************
+   If CS.GetField("490", 2, s490) = True Then
+     If CS.GetField("830", 2, s830) = False Then
+       x = MsgBox ("Add 830 from 490?", 32 & 4, "Series Added Entry-Uniform Title")
+       If x = 6 Then
+         CS.RunMacro("Development!490->830")
+       End If
+      End If
+    End If
+
+End Sub
+'***************************************************************
+'************************* SCRIPT END **************************
+'***************************************************************
+'***************************************************************
+
+'MACRO <DumbFix_toRDA> (actions are listed not in the order they are performed):
+'Login if not online
+' FIXED FIELDS:
+'Fixed Fields - make sure that they are displayed at Top or Bottom
+'Fixed Fields (ELvl, Srce, Desc) - set them according to RDA or leave as it is if the record is PCC\LCODE
+'Fixed Field <Ills> - set for Illustrations if present in 300
+'Fixed Field <Ills> - set for maps if present in 300
+'Fixed Field <Indx> - set for index if present in 504
+'Fixed Field <Cont> - set for bibliograhpy if present in 504
+'Fixed Field <LitF> - if a keyword, associated with a LITERARY WORK, is found in the record,  pop-up menu appears with possible choices
+'Fixed Field <Biog> - if a keyword, associated with a BIOGRAPHY, found in the record,  pop-up menu appears with possible choices
+' FIELDS:
+'040 - check and insert if missing\wrong (Stanford) Language and Cataloging codes ($b eng $e rda)
+'043 - check for errors and add if missing, based on LCSH contents
+'050 - check if missing, fix formating errrors, sincronize the date with 264 and Fixed Field <Dates>
+'100 - add <, $e author> if missing and control
+'260 - change all to 264/1
+'300 - add\remove <.> after <cm> based on 490 presence
+'336, 337, 338 - check for errors and add if missing, based on the type of cataloged material (book, online, serial)
+'830 - add if missing and 490 is present (with a paired field and validation).
+'100, 245, 260, 264, 490, 600, 700, 830 - Fix single character Diacritics (in Stanford records - STF)
+' REPLACE:
+'  <double space> with <single space>
+'  < p. > with < pages >
+'  <(p. > with <(pages >
+'  < pp. > with < pages >
+'  <(pp. > with <(pages >
+'  <ill.> with <illustrations>
+'  Validate record
+'TO BE ADDED:
+'Fixed Field <Cont> -  if a keyword, associated with a DICTIONARY, is found in the record, set for dictionary
+'Fixed Field <Cont> -  if a keyword, associated with a CATALOG, is found in the record, set for dictionary
+'Hijy to Gregorian dates converter
