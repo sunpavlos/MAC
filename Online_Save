@@ -1,0 +1,227 @@
+'MacroName:Online_Save
+'MacroDescription:Adds netID to the record and saves it online.
+
+'*** Adds 902 Filed with netID (extracted from MyStatus) ***
+'*** NetId has to be entered manually only once in OCLC settings--> MyStatus ****
+'*** HOT KEY TO OPTIONS WITH "MYSTATUS" TAB = Alt-t-o ***************************
+'********************************************************************************
+'Option Explicit
+
+   Dim CS As Object
+   Dim sStatus$, sSeries$, sSer$, sTen$, sType$, sHeading$, s949$, sDate$
+   Dim sMsgtext$, sNetID$, sStatisticsFile$, sID$
+   Dim nSaveNum%, nSaveLoc%, nSaveNum2% 
+   Dim sIDList() As String
+
+'*** Define the list with NetIDs ***
+   Sub DefIDList
+   ReDim sIDList(37)
+sIDList(0) = ""
+sIDList(1) = "ac"
+sIDList(2) = "ad"
+sIDList(3) = "atw"
+sIDList(4) = "ay"
+sIDList(5) = "bgn"
+sIDList(6) = "csw"
+sIDList(7) = "cw"
+sIDList(8) = "ded"
+sIDList(9) = "dpk"
+sIDList(10) = "dws"
+sIDList(11) = "ee"
+sIDList(12) = "jar"
+sIDList(13) = "jba"
+sIDList(14) = "jbl"
+sIDList(15) = "jeb"
+sIDList(16) = "jwl"
+sIDList(17) = "jyn"
+sIDList(18) = "kc"
+sIDList(19) = "lr"
+sIDList(20) = "ls"
+sIDList(21) = "lt"
+sIDList(22) = "lwainer"
+sIDList(23) = "mic"
+sIDList(24) = "mis"
+sIDList(25) = "nb"
+sIDList(26) = "of"
+sIDList(27) = "pd"
+sIDList(28) = "pt8_17"
+sIDList(29) = "rb"
+sIDList(30) = "rh"
+sIDList(31) = "rph"
+sIDList(32) = "rs"
+sIDList(33) = "sdg"
+sIDList(34) = "sh2_18"
+sIDList(35) = "wgk"
+sIDList(36) = "yw"
+sIDList(37) = "drt"
+   End Sub
+
+Sub Main
+   Set CS = CreateObject("Connex.Client")
+   DefIDList
+
+'*** Login if not online ***
+   If CS.IsOnline = False Then
+     CS.Logon "", "", ""
+   End If
+
+'*** Make sure MyStatus is present in the settings ***
+   CS.QueryRecordStatus "MYSTATUS", sStatus
+   If sStatus = "" Then
+'*** ADD NetID DropListBox ****************************************
+   Begin Dialog YourID 113, 63, "SELECT Your NetID... please \-_-/"
+   OkButton  9, 34, 40, 14
+   CancelButton  64, 34, 40, 14
+   DropListBox  9, 14, 90, 100, sIDList(), .Status
+End Dialog
+   Dim ID as YourID
+   On Error Resume Next
+   Dialog ID
+'*** Stop macro if user pressed CANCEL ***
+   If Err = 102 then
+    MsgBox "        You chickened out <(^-^)> Macro ABORTED"
+    Exit Sub
+   End If
+
+'*** Make sure that user made a selection ***
+   If ID.Status <> 0 Then
+      sStatus = sIDList(ID.Status)
+   Else
+      MsgBox "      No selection made \('*')/ Macro ABORTED"
+      Exit Sub
+   End If
+   If sStatus = "" Then
+      MsgBox "      No NetID \('*')/ Macro ABORTED"
+   Exit Sub
+   End If
+End If
+
+'*** Getting current Date in YYYYMMDD format ***
+   sDate = Format(Date, "yyyymmdd")
+
+'*** Check if 010 is present ****************
+   If CS.GetField("010", 1, sTen) = True Then
+      sType = "RPL"
+   Else
+      sType = "ADD"
+   End If
+
+'*** Getting 1xx tag and its contents ***********
+   If CS.GetField("100", 1, sHeading) = True Then
+   Else
+    If CS.GetField("110", 1, sHeading) = True Then
+    Else
+     If CS.GetField("111", 1, sHeading) = True Then
+     Else
+      If CS.GetField("130", 1, sHeading) = True Then
+      Else
+       If CS.GetField("151", 1, sHeading) = True Then
+       End If
+      End If
+     End If
+    End If
+   End If
+
+'*** Remove indicators from 1xx ***********
+   sPart1 = Left(sHeading, 3)
+   sPart2 = Right(sHeading, Len(sHeading)-5)
+   sHeading = sPart1 & " " & sPart2
+
+'*** Check for SERIES type ***************************
+   If CS.GetFixedField ("Series", sSeries) = True Then
+    sSer = "n"
+   End If
+
+'*** Stop if something is missing *************************************
+      If sStatus = "" OR sDate = "" OR sType = "" OR sHeading = "" Then
+       MsgBox "Part of 949 is missing. Macro aborted."
+       Exit Sub
+      End If
+
+'*** Prepare and Add 949 ********
+      If sSer = sSeries Then
+       CS.AddField 999, "949  " & sStatus & "*" & sDate & "*" & "OTHER" & "*" & sType
+      Else
+       CS.AddField 999, "949  " & sStatus & "*" & sDate & "*" & "SERIES" & "*" & sType
+      End If
+
+'*** If in Local Save File - get the Save Number *******************
+       CS.CursorRow = 99
+       CS.CursorColumn = 1
+       CS.SendKeys "", -1
+       CS.SendKeys "{TAB 8}", -1
+       Clipboard.Clear
+       CS.SendKeys "^c", -1
+       n = Clipboard.GetText()
+
+'*** Save to Online File *******************
+   nSaveNum = CS.SaveOnline '(True, True)
+   If nSaveNum > 0 Then
+    s949 = nSaveNum & Chr(9) & sStatus & Chr(9) & sType & Chr(9) & sDate & Chr(9) & sHeading
+    MsgBox "The record was | ADDED| to OnlineSavedFile. SaveFile Number is ( " & nSaveNum & " )."
+   Else
+    MsgBox "The record was | NOT ADDED| to OnlineSaveFile. No statistics were recorded."
+    Exit Sub
+   End If
+   
+'*** Delete from Local File *******************
+       If n = "" Then
+       Else
+       CS.Search "AL",""
+       CS.GetListItem (n)
+       CS.DeleteRecord
+       CS.CloseList
+       End If
+
+'*** Append 949 to the "OnlineSave_NetID.txt" LOCALLY ***
+   Clipboard.Clear
+   Clipboard.SetText s949
+   sStatisticsFile="C:\Usr\" & "OnlineSave_" & sStatus & ".txt"
+   Open sStatisticsFile For Append As #1
+   On Error Resume Next
+   If Err = 76 Then
+    s1 = 0
+   Else
+    Write #1, s949
+    Close #1
+    s1 = 1
+   End If
+
+'*** Append 949 to the "OnlineSave_NetID.txt" ONLINE ***
+   sStatisticsFile="\\lib-tsserver\CatDiv\NACO\" & "OnlineSave_" & sStatus & ".txt"
+   Open sStatisticsFile For Append As #1
+   On Error Resume Next
+   If Err = 76 Then
+    s2 = 0
+   Else
+    Write #1, s949
+    Close #1
+    s2 = 2
+   End If
+
+'*** Dialog Box with results ********************************
+    a = "OnlineSavedFile is ( " & nSaveNum & " )"
+    b = "Statistics were added to LOCAL and NETWORK files."
+    c = "LOCAL save location is inaccessible"
+    d = "NETWORK save location is inaccessible"
+
+   If s1 = 1 AND s2 = 2 Then
+    'MsgBox b & "{TAB}" & a
+   Else
+    If s1 = 0 AND s2 = 2 Then
+     'MsgBox e & "{TAB}" & a
+    Else
+     If s1 = 1 AND s2 = 0 Then
+      'MsgBox f & "{TAB}" & a
+     Else
+      If s1 = 0 AND s2 = 0 Then
+      'MsgBox e & "{TAB}" & f  & "{TAB}" & a
+      End If
+     End If
+    End If
+   End If
+
+End Sub
+'****************************************
+'****************************************
+'****************************************
